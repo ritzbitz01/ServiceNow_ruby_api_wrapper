@@ -2,12 +2,13 @@
 require 'faraday'
 require 'pry'
 require 'json'
+require 'dotenv/load'
 
-SERVICE_NOW_BASE_URL = 'https://dev180394.service-now.com/'.freeze
-USERNAME = 'admin'.freeze
-PASSWORD = "Piglet.4life".freeze
-CLIENT_ID = "40af3e30ffa13550797f75b72bf7eaf3".freeze
-CLIENT_PASSWORD = "password123".freeze
+SERVICE_NOW_BASE_URL = ENV["SERVICE_NOW_BASE_URL"]
+USERNAME = ENV["SERVICE_NOW_USERNAME"]
+PASSWORD = ENV["SERVICE_NOW_PASSWORD"]
+CLIENT_ID = ENV["SERVICE_NOW_CLIENT_ID"]
+CLIENT_PASSWORD = ENV["SERVICE_NOW_CLIENT_PASSWORD"]
 
 INCIDENT_API_PATH = '/api/now/table/incident'.freeze
 USER_API_PATH = '/api/now/table/sys_user'.freeze
@@ -130,6 +131,7 @@ end
 # puts "CREATE RESPONSE: #{create_response}"
 
 # new_incident_number = create_response['result']['number']
+
 
 if ARGV.empty?
   puts "Please enter a command to run"
