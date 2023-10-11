@@ -86,6 +86,18 @@ def get_comments(incident_num:)
   response.body
 end
 
+def add_comment(incident_num:, comment:)
+  comment_body = {
+    comments: comment
+  }
+  service_now_client.patch("#{INCIDENT_API_PATH}/#{incident_num}", comment_body.to_json)
+
+  # Get all comments for incident and return the last one
+  comments = get_comments(incident_num: incident_num)["result"]
+  sorted_list = comments.sort_by { |k| k["sys_created_on"]}
+  sorted_list.last
+end
+
 def create_incident(incident_body:)
   response = service_now_client.post(INCIDENT_API_PATH, incident_body.to_json)
   response.body
@@ -107,7 +119,6 @@ def get_oauth_token
 
   response.body
 end
-
 
 # new_incident = {
 #   short_description: "This is my #{rand(1000)}th incident and boy am I getting tired of this.",
@@ -143,6 +154,7 @@ if ARGV.empty?
   puts "  create_incident [1..n] <key: value>"
   puts "  get_user <user_sys_id>"
   puts "  get_oauth_token"
+  puts "  add_comment <incident_sys_id> <comment>"
 else
   case ARGV[0]
   when 'get_incident'
@@ -176,6 +188,7 @@ else
     end
   when 'get_field_names'
     field_names = get_field_names
+    puts "ALL FIELDS: #{field_names.to_json}"
     puts "FIELDS: #{field_names['result']['columns'].keys}"
   when 'create_incident'
     puts "CREATE INCIDENT NOT QUITE SUPPORTED YET"
@@ -189,5 +202,21 @@ else
   when 'get_oauth_token'
     token_response = get_oauth_token
     puts "TOKEN: #{token_response}"
+  when 'add_comment'
+    if ARGV[1].nil?
+      puts "Please enter an incident sys id"
+    elsif ARGV[2].nil?
+      puts "Please enter a comment"
+    else
+      resp = add_comment(incident_num: ARGV[1], comment: ARGV[2])
+      puts "Add Comment Response: #{resp.to_json}"
+    end
+  when 'get_states'
+    field_names = get_field_names
+    field_names['result']['columns']['state']['choices'].each do |choice|
+      puts "CHOICE: #{choice['label']}: #{choice['value']}"
+    end
+    # puts "FIELDS: #{field_names['result']['columns']['state']['choices'].keys}"
   end
+
 end
