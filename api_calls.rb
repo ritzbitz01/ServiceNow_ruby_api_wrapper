@@ -13,6 +13,7 @@ CLIENT_PASSWORD = ENV["SERVICE_NOW_CLIENT_PASSWORD"]
 INCIDENT_API_PATH = '/api/now/table/incident'.freeze
 USER_API_PATH = '/api/now/table/sys_user'.freeze
 INCIDENT_API_COMMENT_PATH = '/api/now/table/sys_journal_field'.freeze
+INCIDENT_FIELD_PATH = '/api/now/table/sys_history_line'.freeze 
 USER_AGENT = 'RWRMDR/0.0.1'.freeze
 
 def incident_body
@@ -83,6 +84,12 @@ end
 
 def get_comments(incident_num:)
   response = service_now_client.get("#{INCIDENT_API_COMMENT_PATH}?sysparm_query=element_id=#{incident_num}^element=comments")
+  response.body
+end
+
+def get_field_changes(incident_num:)
+  # /api/now/table/sys_history_line?sysparm_query=fieldINduration,start_date^set.id=%3Csys_id_of_task%3E^update!=0^ORDERBYupdate_time&sysparm_fields=label,user,set.id,set.sys_id,update_time,old_value,new&sysparm_display_value=all
+  response = service_now_client.get("#{INCIDENT_FIELD_PATH}?sysparm_query=fieldINstate^set.id=#{incident_num}")
   response.body
 end
 
@@ -185,6 +192,13 @@ else
     else
       comments = get_comments(incident_num: ARGV[1])
       puts "Incident Comments: #{comments.to_json}"
+    end
+  when 'get_field_changes'
+    if ARGV[1].nil?
+      puts "Please enter an incident sys id"
+    else
+      field_changes = get_field_changes(incident_num: ARGV[1])
+      puts "Incident Field Changes: #{field_changes.to_json}"
     end
   when 'get_field_names'
     field_names = get_field_names
