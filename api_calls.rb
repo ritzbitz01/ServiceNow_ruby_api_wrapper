@@ -9,6 +9,7 @@ USERNAME = ENV["SERVICE_NOW_USERNAME"]
 PASSWORD = ENV["SERVICE_NOW_PASSWORD"]
 CLIENT_ID = ENV["SERVICE_NOW_CLIENT_ID"]
 CLIENT_PASSWORD = ENV["SERVICE_NOW_CLIENT_PASSWORD"]
+REDIRECT_URI = ENV["SERVICE_NOW_REDIRECT_URI"]
 
 INCIDENT_API_PATH = '/api/now/table/incident'.freeze
 USER_API_PATH = '/api/now/table/sys_user'.freeze
@@ -22,13 +23,22 @@ def incident_body
   }
 end
 
-def oauth_body
+def oauth_authorization_code_body
   {
     grant_type: "password",
     client_id: CLIENT_ID,
     client_secret: CLIENT_PASSWORD,
     username: USERNAME,
     password: PASSWORD
+  }
+end
+
+def oauth_token_body
+  {
+    grant_type: "Authorization Code",
+    redirect_uri: REDIRECT_URI,
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_PASSWORD
   }
 end
 
@@ -116,15 +126,21 @@ def get_user(sys_id:)
 end
 
 def get_oauth_token
+  # First need to get an authorization code that can be used to retrieve the token
   snclient = Faraday.new(
     url: SERVICE_NOW_BASE_URL
   )
 
-  response = snclient.post("oauth_token.do") do |req|
-    req.body = URI.encode_www_form(oauth_body)
+  response_auth = snclient.get("oauth_auth.do?response_type=code&redirect_uri=https://bsglobaldev.service-now.com/oauth_redirect.do&client_id=#{CLIENT_ID}&state=123") 
+
+  authorization_code = response_auth.body["result"]["code"]
+
+  # Then call the token URL to get the OAuth token
+  response_token = snclient.post("oauth_token.do?code=#{authorization_code}") do |req|
+    req.body = URI.encode_www_form(oauth_token_body)
   end
 
-  response.body
+  response_token.body
 end
 
 # new_incident = {
