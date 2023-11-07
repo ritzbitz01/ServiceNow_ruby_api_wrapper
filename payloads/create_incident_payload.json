@@ -1,0 +1,7 @@
+{
+  "short_description": "RWR RC Test Incident 001",
+  "description": "This is a test incident to exercise API 001",
+  "correlation_id": "1343",
+  "impact": "4",
+  "urgency": "2"
+}

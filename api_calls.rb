@@ -11,6 +11,8 @@ CLIENT_ID = ENV["SERVICE_NOW_CLIENT_ID"]
 CLIENT_PASSWORD = ENV["SERVICE_NOW_CLIENT_PASSWORD"]
 REDIRECT_URI = ENV["SERVICE_NOW_REDIRECT_URI"]
 
+BS_CREATE_INCIDENT_API_PATH = 'api/beme2/bsg_redcanary_inc_api/createINC'.freeze
+BS_GET_INCIDENT_API_PATH = 'api/beme2/bsg_redcanary_inc_api/getINC'.freeze
 INCIDENT_API_PATH = '/api/now/table/incident'.freeze
 USER_API_PATH = '/api/now/table/sys_user'.freeze
 INCIDENT_API_COMMENT_PATH = '/api/now/table/sys_journal_field'.freeze
@@ -30,15 +32,6 @@ def oauth_authorization_code_body
     client_secret: CLIENT_PASSWORD,
     username: USERNAME,
     password: PASSWORD
-  }
-end
-
-def oauth_token_body
-  {
-    grant_type: "Authorization Code",
-    redirect_uri: REDIRECT_URI,
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_PASSWORD
   }
 end
 
@@ -64,7 +57,7 @@ def service_now_client_oauth(token:)
     b.authorization :Bearer, token
     b.adapter Faraday.default_adapter
 
-    b.use Faraday::Response::RaiseError # compatibility with existing error handling strat
+    b.use Faraday::Response::RaiseError
   end
 
 end
@@ -80,15 +73,26 @@ def get_incident_oauth(incident_num:, token:)
   response
 end
 
+def get_incident_bs(number:, correlation_id:, token:)
+  response = service_now_client_oauth(token: token).get("#{BS_GET_INCIDENT_API_PATH}?number=#{number}&correlation_id=#{correlation_id}")
+  response
+end
+
 def get_all_incidents
   response = service_now_client.get(INCIDENT_API_PATH)
   response.body
 end
 
-def get_field_names
+def get_all_incidents_oauth(token:)
+  # response = service_now_client.get(INCIDENT_API_PATH)
+  response = service_now_client_oauth(token: token).get("#{INCIDENT_API_PATH}")
+  response.body
+end
+
+def get_field_names(token:)
   tablename = 'incident'
   meta_url = "/api/now/ui/meta/#{tablename}"
-  response = service_now_client.get(meta_url)
+  response = service_now_client_oauth(token: token).get(meta_url)
   response.body
 end
 
@@ -98,7 +102,6 @@ def get_comments(incident_num:)
 end
 
 def get_field_changes(incident_num:)
-  # /api/now/table/sys_history_line?sysparm_query=fieldINduration,start_date^set.id=%3Csys_id_of_task%3E^update!=0^ORDERBYupdate_time&sysparm_fields=label,user,set.id,set.sys_id,update_time,old_value,new&sysparm_display_value=all
   response = service_now_client.get("#{INCIDENT_FIELD_PATH}?sysparm_query=fieldINstate^set.id=#{incident_num}")
   response.body
 end
@@ -115,8 +118,16 @@ def add_comment(incident_num:, comment:)
   sorted_list.last
 end
 
-def create_incident(incident_body:)
-  response = service_now_client.post(INCIDENT_API_PATH, incident_body.to_json)
+def create_incident(token:)
+  threat_num = rand(1..1000)
+  request_body = {
+    short_description: "RWR RC Test Incident #{threat_num}",
+    description: "This is a test incident to exercise API 001",
+    correlation_id: "##{threat_num}}",
+    impact: rand(1..4),
+    urgency: rand(1..4)
+  }
+  response = service_now_client_oauth(token: token).post(BS_CREATE_INCIDENT_API_PATH, request_body.to_json)
   response.body
 end
 
@@ -131,66 +142,46 @@ def get_oauth_token
     url: SERVICE_NOW_BASE_URL
   )
 
-  response_auth = snclient.get("oauth_auth.do?response_type=code&redirect_uri=https://bsglobaldev.service-now.com/oauth_redirect.do&client_id=#{CLIENT_ID}&state=123") 
-
-  authorization_code = response_auth.body["result"]["code"]
-
-  # Then call the token URL to get the OAuth token
-  response_token = snclient.post("oauth_token.do?code=#{authorization_code}") do |req|
-    req.body = URI.encode_www_form(oauth_token_body)
+  response_auth = snclient.post("oauth_token.do") do |req|
+    req.body = URI.encode_www_form(oauth_authorization_code_body)
   end
 
-  response_token.body
+  access_token = JSON.parse(response_auth.body)["access_token"]
+
+  access_token
 end
 
-# new_incident = {
-#   short_description: "This is my #{rand(1000)}th incident and boy am I getting tired of this.",
-#   assignment_group: '287ebd7da9fe198100f92cc8d1d2154e',
-#   urgency: '2',
-#   impact: '2',
-# }
 
-# customFields = {"0"=>{"title"=>"x_1115365_rwr_te_0_foo", "value"=>"Lorem Ipsum Grande Latte"},"1"=>{"title"=>"x_1115365_rwr_te_0_piglet", "value"=>"stays"}}
-
-# incident_fields = {}
-
-# customFields.values.each do |cf|
-#   new_incident[cf['title'].to_sym] = cf['value']
-# end
-
-# binding.pry
-
-# create_response = create_incident(incident_body: new_incident)
-
-# puts "CREATE RESPONSE: #{create_response}"
-
-# new_incident_number = create_response['result']['number']
-
-
+# Main
 if ARGV.empty?
   puts "Please enter a command to run"
   puts "Usage:"
-  puts "  get_incident <incident_sys_id>"
+  puts "  create_incident"
+  puts "  get_incident <incident_number> <incident_correlation_id>"
   puts "  get_all_incidents"
   puts "  get_comments <incident_sys_id>"
   puts "  get_field_names"
-  puts "  create_incident [1..n] <key: value>"
   puts "  get_user <user_sys_id>"
   puts "  get_oauth_token"
   puts "  add_comment <incident_sys_id> <comment>"
 else
   case ARGV[0]
-  when 'get_incident'
-    if ARGV[1].nil?
-      puts "Please enter an incident sys id"
+  when 'create_incident'
+    oauth_token = get_oauth_token
+    incident = create_incident(token: oauth_token)
+    puts "INCIDENT: #{incident}"
+  when 'get_incident_bs'
+    if ARGV[1].nil? || ARGV[2].nil?
+      puts "Please enter an incident number and correlation id"
     else
-      token_response = JSON.parse(get_oauth_token)
+      oauth_token = get_oauth_token
       # puts "TOKEN RESPONSE: #{token_response["access_token"]}"
-      incident = get_incident_oauth(incident_num: ARGV[1], token: token_response["access_token"])
+      incident = get_incident_bs(number: ARGV[1], correlation_id: ARGV[2], token: oauth_token)
       puts "INCIDENT: #{incident.body.to_json}"
     end
   when 'get_all_incidents'
-    incidents = get_all_incidents
+    token = get_oauth_token
+    incidents = get_all_incidents_oauth(token: token)
     puts "#{incidents["result"].length} found: How many do you want to see?"
     num = STDIN.gets.chomp.to_i
     i = 0
@@ -217,11 +208,10 @@ else
       puts "Incident Field Changes: #{field_changes.to_json}"
     end
   when 'get_field_names'
-    field_names = get_field_names
+    token = get_oauth_token
+    field_names = get_field_names(token: token)
     puts "ALL FIELDS: #{field_names.to_json}"
     puts "FIELDS: #{field_names['result']['columns'].keys}"
-  when 'create_incident'
-    puts "CREATE INCIDENT NOT QUITE SUPPORTED YET"
   when 'get_user'
     if ARGV[1].nil?
       puts "Please enter a user sys id"
